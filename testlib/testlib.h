@@ -22,10 +22,10 @@
 #define _TESTLIB_H_
 
 /*
- * Copyright (c) 2005-2013
+ * Copyright (c) 2005-2015
  */
 
-#define VERSION "0.9.5"
+#define VERSION "0.9.9"
 
 /* 
  * Mike Mirzayanov
@@ -63,6 +63,7 @@
  */
 
 const char* latestFeatures[] = {
+                          "POINTS_EXIT_CODE returned back to 7 (instead of 0)",
                           "Removed disable buffers for interactive problems, because it works unexpectedly in wine",
                           "InStream over string: constructor of InStream from base InStream to inherit policies and std::string",
                           "Added expectedButFound quit function, examples: expectedButFound(_wa, 10, 20), expectedButFound(_fail, ja, pa, \"[n=%d,m=%d]\", n, m)",
@@ -160,7 +161,7 @@ const char* latestFeatures[] = {
 #define CR ((char)13)
 #define TAB ((char)9)
 #define SPACE ((char)' ')
-#define EOFC ((char)26)
+#define EOFC (255)
 
 #ifndef OK_EXIT_CODE
 #   define OK_EXIT_CODE 0
@@ -199,7 +200,7 @@ const char* latestFeatures[] = {
 #endif
 
 #ifndef POINTS_EXIT_CODE
-#   define POINTS_EXIT_CODE 0
+#   define POINTS_EXIT_CODE 7
 #endif
 
 #ifndef UNEXPECTED_EOF_EXIT_CODE
@@ -337,7 +338,20 @@ static bool __testlib_isInfinite(double r)
     return (ra > 1E100 || ra < -1E100);
 }
 
+#ifndef _fileno
+#define _fileno(_stream)  ((_stream)->_file)
+#endif
+
+#ifndef O_BINARY
+static void __testlib_set_binary(
+#ifdef __GNUC__
+    __attribute__((unused)) 
+#endif
+    std::FILE* file
+)
+#else
 static void __testlib_set_binary(std::FILE* file)
+#endif
 {
 #ifdef O_BINARY
     if (NULL != file)
@@ -1188,7 +1202,7 @@ pattern::pattern(std::string s): s(s), from(0), to(0)
     {
         if (seps.size() > 0)
         {
-            seps.push_back(s.length());
+            seps.push_back(int(s.length()));
             int last = 0;
 
             for (size_t i = 0; i < seps.size(); i++)
@@ -1212,7 +1226,7 @@ pattern::pattern(std::string s): s(s), from(0), to(0)
 template <typename C>
 inline bool isEof(C c)
 {
-    return (c == EOF || c == EOFC);
+    return c == EOFC;
 }
 
 template <typename C>
@@ -1286,6 +1300,7 @@ public:
     virtual void unreadChar(int c) = 0;
     virtual std::string getName() = 0;
     virtual bool eof() = 0;
+    virtual void close() = 0;
     virtual ~InputStreamReader() = 0;
 };
 
@@ -1309,7 +1324,7 @@ public:
     int curChar()
     {
         if (pos >= s.length())
-            return EOF;
+            return EOFC;
         else
         {
             return s[pos];
@@ -1319,7 +1334,7 @@ public:
     int nextChar()
     {
         if (pos >= s.length())
-            return EOF;
+            return EOFC;
         else
             return s[pos++];
     }
@@ -1347,6 +1362,11 @@ public:
     {
         return pos >= s.length();
     }
+
+    void close()
+    {
+        // No operations.
+    }
 };
 
 class FileInputStreamReader: public InputStreamReader
@@ -1354,6 +1374,14 @@ class FileInputStreamReader: public InputStreamReader
 private:
     std::FILE* file;
     std::string name;
+
+    inline int postprocessGetc(int getcResult)
+    {
+        if (getcResult != EOF)
+            return getcResult;
+        else
+            return EOFC;
+    }
 
 public:
     FileInputStreamReader(std::FILE* file, const std::string& name): file(file), name(name)
@@ -1364,21 +1392,21 @@ public:
     int curChar()
     {
         if (feof(file))
-            return EOF;
+            return EOFC;
         else
         {
             int c = getc(file);
             ungetc(c, file);
-            return c;
+            return postprocessGetc(c);
         }
     }
 
     int nextChar()
     {
         if (feof(file))
-            return EOF;
+            return EOFC;
         else
-            return getc(file);
+            return postprocessGetc(getc(file));
     }
 
     void skipChar()
@@ -1398,14 +1426,24 @@ public:
 
     bool eof()
     {
-        if (feof(file))
+        if (NULL == file || feof(file))
             return true;
         else
         {
-            int c = getc(file);
-            bool result = (c == EOF);
-            ungetc(c, file);
-            return result;
+            int c = nextChar();
+            if (c == EOFC || (c == EOF && feof(file)))
+                return true;
+            unreadChar(c);
+            return false;
+        }
+    }
+
+    void close()
+    {
+        if (NULL != file)
+        {
+            fclose(file);
+            file = NULL;
         }
     }
 };
@@ -1478,17 +1516,17 @@ public:
     int curChar()
     {
         if (!refill())
-            return EOF;
+            return EOFC;
 
-        return isEof[bufferPos] ? EOF : buffer[bufferPos];
+        return isEof[bufferPos] ? EOFC : buffer[bufferPos];
     }
 
     int nextChar()
     {
         if (!refill())
-            return EOF;
+            return EOFC;
 
-        return isEof[bufferPos] ? EOF : buffer[bufferPos++];
+        return isEof[bufferPos] ? EOFC : buffer[bufferPos++];
     }
 
     void skipChar()
@@ -1501,8 +1539,8 @@ public:
         bufferPos--;
         if (bufferPos < 0)
             __testlib_fail("BufferedFileInputStreamReader::unreadChar(int): bufferPos < 0");
-        isEof[bufferPos] = (c == EOF);
-        buffer[bufferPos] = char(c == EOF ? EOFC : c);
+        isEof[bufferPos] = (c == EOFC);
+        buffer[bufferPos] = char(c);
     }
 
     std::string getName()
@@ -1512,12 +1550,21 @@ public:
     
     bool eof()
     {
-        return !refill() || EOF == curChar();
+        return !refill() || EOFC == curChar();
+    }
+
+    void close()
+    {
+        if (NULL != file)
+        {
+            fclose(file);
+            file = NULL;
+        }
     }
 };
 
-const size_t BufferedFileInputStreamReader::BUFFER_SIZE = 1000000;
-const size_t BufferedFileInputStreamReader::MAX_UNREAD_COUNT = 100; 
+const size_t BufferedFileInputStreamReader::BUFFER_SIZE = 2000000;
+const size_t BufferedFileInputStreamReader::MAX_UNREAD_COUNT = BufferedFileInputStreamReader::BUFFER_SIZE / 2; 
 
 /*
  * Streams to be used for reading data in checkers or validators.
@@ -1535,7 +1582,6 @@ struct InStream
 
     InputStreamReader* reader;
 
-    std::FILE* file;
     std::string name;
     TMode mode;
     bool opened;
@@ -1568,7 +1614,7 @@ struct InStream
     void unreadChar(char c);
 
     /* Reopens stream, you should not use it. */
-    void reset();
+    void reset(std::FILE* file = NULL);
     /* Checks that current position is EOF. If not it doesn't move stream pointer. */
     bool eof();
     /* Moves pointer to the first non-white-space character and calls "eof()". */
@@ -1804,7 +1850,7 @@ static std::string toString(const T& t)
 
 InStream::InStream()
 {
-    file = NULL;
+    // file = NULL;
     name = "";
     mode = _input;
     strict = false;
@@ -1825,6 +1871,7 @@ InStream::~InStream()
 {
     if (NULL != reader)
     {
+        reader->close();
         delete reader;
         reader = NULL;
     }
@@ -1858,7 +1905,12 @@ int resultExitCode(TResult r)
     return FAIL_EXIT_CODE;
 }
 
-void InStream::textColor(WORD color)
+void InStream::textColor(
+#if !(defined(ON_WINDOWS) && (!defined(_MSC_VER) || _MSC_VER>1400)) && defined(__GNUC__)
+    __attribute__((unused)) 
+#endif
+    WORD color
+)
 {
 #if defined(ON_WINDOWS) && (!defined(_MSC_VER) || _MSC_VER>1400)
     HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -1877,10 +1929,20 @@ NORETURN void halt(int exitCode)
     std::exit(exitCode);
 }
 
+static bool __testlib_shouldCheckDirt(TResult result)
+{
+    return result == _ok || result == _points || result >= _partially;
+}
+
 NORETURN void InStream::quit(TResult result, const char* msg)
 {
     if (TestlibFinalizeGuard::alive)
         testlibFinalizeGuard.quitCount++;
+
+#ifndef ENABLE_UNEXPECTED_EOF
+    if (result == _unexpected_eof)
+        result = _pe;
+#endif
 
     if (mode != _output && result != _fail)
         quits(_fail, std::string(msg) + " (" + name + ")");
@@ -1888,7 +1950,7 @@ NORETURN void InStream::quit(TResult result, const char* msg)
     std::FILE * resultFile;
     std::string errorName;
     
-    if (result == _ok)
+    if (__testlib_shouldCheckDirt(result))
     {
         if (testlibMode != _interactor && !ouf.seekEof())
             quit(_dirt, "Extra information in the output file");
@@ -1925,11 +1987,7 @@ NORETURN void InStream::quit(TResult result, const char* msg)
         quitscrS(LightYellow, errorName);
         break;
     case _unexpected_eof:
-#ifdef ENABLE_UNEXPECTED_EOF
         errorName = "unexpected eof ";
-#else
-        errorName = "wrong output format ";
-#endif
         quitscrS(LightCyan, errorName);
         break;
     default:
@@ -1977,12 +2035,9 @@ NORETURN void InStream::quit(TResult result, const char* msg)
     quitscr(LightGray, msg);
     std::fprintf(stderr, "\n");
 
-    if (inf.file)
-        fclose(inf.file);
-    if (ouf.file)
-        fclose(ouf.file);
-    if (ans.file)
-        fclose(ans.file);
+    inf.close();
+    ouf.close();
+    ans.close();
     if (tout.is_open())
         tout.close();
 
@@ -2057,7 +2112,7 @@ void InStream::quitscr(WORD color, const char* msg)
     }
 }
 
-void InStream::reset()
+void InStream::reset(std::FILE* file)
 {
     if (opened && stdfile)
         quit(_fail, "Can't reset standard handle");
@@ -2069,17 +2124,28 @@ void InStream::reset()
         if (NULL == (file = std::fopen(name.c_str(), "rb")))
         {
             if (mode == _output)
-                quits(_pe, std::string("File not found: \"") + name + "\"");
+                quits(_pe, std::string("Output file not found: \"") + name + "\"");
+            
+            if (mode == _answer)
+                quits(_fail, std::string("Answer file not found: \"") + name + "\"");
         }
 
-    opened = true;
+    if (NULL != file)
+    {
+        opened = true;
 
-    __testlib_set_binary(file);
+        __testlib_set_binary(file);
 
-    if (stdfile)
-        reader = new FileInputStreamReader(file, name);
+        if (stdfile)
+            reader = new FileInputStreamReader(file, name);
+        else
+            reader = new BufferedFileInputStreamReader(file, name);
+    }
     else
-        reader = new BufferedFileInputStreamReader(file, name);
+    {
+        opened = false;
+        reader = NULL;
+    }
 }
 
 void InStream::init(std::string fileName, TMode mode)
@@ -2088,6 +2154,7 @@ void InStream::init(std::string fileName, TMode mode)
     name = fileName;
     stdfile = false;
     this->mode = mode;
+    
     reset();
 }
 
@@ -2106,22 +2173,19 @@ void InStream::init(std::FILE* f, TMode mode)
     if (f == stderr)
         name = "stderr", stdfile = true;
 
-    this->file = f;
     this->mode = mode;
-    
-    reset();
+
+    reset(f);
 }
 
 char InStream::curChar()
 {
-    int c = reader->curChar();
-    return char(c != EOF ? c : EOFC);
+    return char(reader->curChar());
 }
 
 char InStream::nextChar()
 {
-    int c = reader->nextChar();
-    return char(c != EOF ? c : EOFC);
+    return char(reader->nextChar());
 }
 
 char InStream::readChar()
@@ -2176,7 +2240,7 @@ void InStream::readWordTo(std::string& result)
 
     int cur = reader->nextChar();
 
-    if (cur == EOF)
+    if (cur == EOFC)
         quit(_unexpected_eof, "Unexpected end of file - token expected");
 
     if (isBlanks(cur))
@@ -2184,7 +2248,7 @@ void InStream::readWordTo(std::string& result)
 
     result.clear();
 
-    while (!(isBlanks(cur) || cur == EOF))
+    while (!(isBlanks(cur) || cur == EOFC))
     {
         result += char(cur);
         cur = reader->nextChar();
@@ -2501,6 +2565,7 @@ long long InStream::readLong()
         quit(_unexpected_eof, "Unexpected end of file - int64 expected");
 
     readWordTo(_tmpReadToken);
+
     return stringToLongLong(*this, _tmpReadToken.c_str());
 }
 
@@ -2609,7 +2674,7 @@ double InStream::readStrictDouble(double minv, double maxv,
 
 bool InStream::eof()
 {
-    if (!strict && NULL == file)
+    if (!strict && NULL == reader)
         return true;
 
     return reader->eof();
@@ -2617,7 +2682,7 @@ bool InStream::eof()
 
 bool InStream::seekEof()
 {
-    if (NULL == file)
+    if (!strict && NULL == reader)
         return true;
     skipBlanks();
     return eof();
@@ -2625,14 +2690,14 @@ bool InStream::seekEof()
 
 bool InStream::eoln()
 {
-    if (!strict && NULL == file)
+    if (!strict && NULL == reader)
         return true;
 
     int c = reader->nextChar();
 
     if (!strict)
     {
-        if (c == EOF)
+        if (c == EOFC)
             return true;
 
         if (c == CR)
@@ -2701,7 +2766,7 @@ void InStream::readEof()
 
 bool InStream::seekEoln()
 {
-    if (NULL == file)
+    if (!strict && NULL == reader)
         return true;
     
     int cur;
@@ -2722,7 +2787,7 @@ void InStream::nextLine()
 
 void InStream::readStringTo(std::string& result)
 {
-    if (NULL == file)
+    if (NULL == reader)
         quit(_pe, "Expected line");
 
     result.clear();
@@ -2735,7 +2800,7 @@ void InStream::readStringTo(std::string& result)
         if (isEoln(cur))
             break;
 
-        if (cur == EOF)
+        if (cur == EOFC)
             break;
 
         result += char(reader->nextChar());
@@ -2814,11 +2879,9 @@ std::string InStream::readLine(const std::string& ptrn, const std::string& varia
 
 void InStream::close()
 {
-    if (opened)
-        fclose(file);
-    
     if (NULL != reader)
     {
+        reader->close();
         delete reader;
         reader = NULL;
     }
@@ -2850,6 +2913,20 @@ NORETURN void __testlib_quitp(double points, const char* message)
     quit(_points, quitMessage.c_str());
 }
 
+NORETURN void __testlib_quitp(int points, const char* message)
+{
+    __testlib_points = points;
+    std::string stringPoints = format("%d", points);
+
+    std::string quitMessage;
+    if (NULL == message || 0 == strlen(message))
+        quitMessage = stringPoints;
+    else
+        quitMessage = stringPoints + " " + message;
+
+    quit(_points, quitMessage.c_str());
+}
+
 NORETURN void quitp(float points, const std::string& message = "")
 {
     __testlib_quitp(double(points), message.c_str());
@@ -2863,6 +2940,11 @@ NORETURN void quitp(double points, const std::string& message = "")
 NORETURN void quitp(long double points, const std::string& message = "")
 {
     __testlib_quitp(double(points), message.c_str());
+}
+
+NORETURN void quitp(int points, const std::string& message = "")
+{
+    __testlib_quitp(points, message.c_str());
 }
 
 template<typename F>
@@ -2900,7 +2982,7 @@ NORETURN void __testlib_help()
 {
     InStream::textColor(InStream::LightCyan);
     std::fprintf(stderr, "TESTLIB %s, http://code.google.com/p/testlib/ ", VERSION);
-    std::fprintf(stderr, "by Mike Mirzayanov, copyright(c) 2005-2013\n");
+    std::fprintf(stderr, "by Mike Mirzayanov, copyright(c) 2005-2014\n");
     std::fprintf(stderr, "Checker name: \"%s\"\n", checkerName.c_str());
     InStream::textColor(InStream::LightGray);
 
@@ -2928,6 +3010,9 @@ static void __testlib_ensuresPreconditions()
 
     // testlib assumes: sizeof(long long) = 8.
     __TESTLIB_STATIC_ASSERT(sizeof(long long) == 8);
+
+    // testlib assumes: sizeof(double) = 8.
+    __TESTLIB_STATIC_ASSERT(sizeof(double) == 8);
 
     // testlib assumes: no -ffast-math.
     if (!__testlib_isNaN(+__testlib_nan()))
@@ -3050,7 +3135,7 @@ void registerTestlibCmd(int argc, char* argv[])
     __testlib_ensuresPreconditions();
 
     testlibMode = _checker;
-    __testlib_set_binary(stdin);    
+    __testlib_set_binary(stdin);
 
     if (argc > 1 && !strcmp("--help", argv[1]))
         __testlib_help();
@@ -3245,6 +3330,9 @@ void random_shuffle(_RandomAccessIter , _RandomAccessIter )
 #ifdef __GNUC__
 __attribute__ ((error("Don't use rand(), use rnd.next() instead")))
 #endif
+#ifdef _MSC_VER
+#   pragma warning( disable : 4273 )
+#endif
 int rand() RAND_THROW_STATEMENT
 {
     quitf(_fail, "Don't use rand(), use rnd.next() instead");
@@ -3258,6 +3346,9 @@ __attribute__ ((error("Don't use srand(), you should use "
         "'registerGen(argc, argv, 1);' to initialize generator seed "
         "by hash code of the command line params. The third parameter "
         "is randomGeneratorVersion (currently the latest is 1).")))
+#endif
+#ifdef _MSC_VER
+#   pragma warning( disable : 4273 )
 #endif
 void srand(unsigned int seed) RAND_THROW_STATEMENT
 {
