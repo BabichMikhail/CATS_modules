@@ -27,14 +27,14 @@ $-10000 \le A, B \le 10000$
 
 <Module src="testlib.pas" type="checker" de_code="1" export="std.testlib.pas.1.9"/>
 <Module src="testlib_winter_2009/testlib.pas" type="checker" de_code="1" export="std.testlib.pas.winter.2009"/>
-<Module src="testlib.h" type="validator" de_code="1" export="std.validator.testlib.h.last"/>
-<Module src="testlib.h" type="checker" de_code="1" export="std.testlib.h.last"/>
 <Module src="testlib_0_4_3/testlib.h" type="checker" de_code="1" export="std.testlib.h.0.4.3"/>
 <Module src="testlib_0_3_3/testlib.h" type="checker" de_code="1" export="std.testlib.h.0.3.3"/>
 <Module src="testlib_0_6_2/testlib.h" type="checker" de_code="1" export="std.testlib.h.0.6.2"/>
 <Module src="testlib_0_7_4/testlib.h" type="checker" de_code="1" export="std.testlib.h.0.7.4"/>
 <Module src="testlib4j.jar" type="checker" de_code="1" export="std.testlib.jar"/>
 <Module src="neerc2010/testlib4j.jar" type="checker" de_code="1" export="std.testlib.jar.neerc2010"/>
+<Module src="testlib.h" type="validator" de_code="1" export="std.validator.testlib.h.last"/>
+<Module src="testlib.h" type="checker" de_code="1" export="std.testlib.h.last"/>
 
 <Solution name="sol" src="sum.cpp"/>
 <Checker src="ncmp.cpp" style="testlib"/>
