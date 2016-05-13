@@ -32,7 +32,7 @@ end;
 <OutputFormat>
 </OutputFormat>
 
-<Solution name="sol" src="sol.dpr" />
+<Solution name="sol" src="sol.cpp" />
 <Import guid="std.strs" type="checker" />
 <Generator export="std.autogen" name="gen" src="gen.cpp" outputFile="*STDOUT"/>
 <Module export="std.parser.h" type="generator" src="parser.h" de_code="1" />

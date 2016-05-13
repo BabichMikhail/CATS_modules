@@ -36,8 +36,8 @@ $-10000 \le A, B \le 10000$
 <Module src="testlib4j.jar" type="checker" de_code="1" export="std.testlib.jar"/>
 <Module src="neerc2010/testlib4j.jar" type="checker" de_code="1" export="std.testlib.jar.neerc2010"/>
 
-<Solution name="sol" src="sum.dpr"/>
-<Checker src="nums.dpr" style="testlib"/>
+<Solution name="sol" src="sum.cpp"/>
+<Checker src="ncmp.cpp" style="testlib"/>
 
 <Test rank="1-3"><In src="%n.tst"/><Out use="sol"/></Test>
 

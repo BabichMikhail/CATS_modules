@@ -4,9 +4,9 @@
   tlimit="1" mlimit="64" 
   inputFile="input.txt" outputFile="output.txt">
 
-<Solution name="sol" src="sol.dpr"/>
+<Solution name="sol" src="sol.cpp"/>
 <TestRange from="1" to="5"><In src="%0n.in"/><Out use="sol"/></TestRange>
-<Checker src="strs.dpr" style="testlib" export="std.strs" />
+<Checker src="strs.pl" style="testlib" export="std.strs" />
 
 </Problem>
 </CATS>

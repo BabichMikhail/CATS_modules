@@ -26,12 +26,12 @@ $-10000 \le A, B \le 10000$
     <SampleOut>8</SampleOut>
 </Sample>
 
-<Solution name="sol" src="sum.dpr" export="std.sol.sum" />
+<Solution name="sol" src="sum.pl" export="std.sol.sum" />
 
 <Test rank="1"><In src="1.tst" /><Out src="1.ans" /></Test>
 <Test rank="2"><In src="2.tst" /><Out src="2.ans" /></Test>
 <Test rank="3"><In src="3.tst" /><Out src="3.ans" /></Test>
-<Checker src="nums.dpr" style="testlib" export="std.nums" />
+<Checker src="nums.pl" style="testlib" export="std.nums" />
 
 </Problem>
 </CATS>

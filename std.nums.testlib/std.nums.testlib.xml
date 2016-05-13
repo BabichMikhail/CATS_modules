@@ -27,8 +27,8 @@ $-10000 \le A, B \le 10000$
 
 <Module src="testlib.pas" type="checker" de_code="1" export="std.testlib.1.1" />
 
-<Solution name="sol" src="sum.dpr" />
-<Checker src="nums.dpr" style="testlib" export="std.nums.testlib" />
+<Solution name="sol" src="sum.pl" />
+<Checker src="nums.pl" style="testlib" export="std.nums.testlib" />
 
 <Test rank="1"><In src="1.tst" /><Out src="1.ans" /></Test>
 <Test rank="2"><In src="2.tst" /><Out src="2.ans" /></Test>

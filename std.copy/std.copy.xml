@@ -3,10 +3,10 @@
 <Problem title="Default: std.copy" lang="en" tlimit="1" mlimit="64" 
   inputFile="input.txt" outputFile="output.txt">
 
-<Solution name="sol" src="sol.dpr"/>
+<Solution name="sol" src="sol.cpp"/>
 
 <Import guid="std.strs" type="checker"/>
-<Generator name="gen" src="gencopy.dpr" export="std.copy" outputFile="*STDOUT"/>
+<Generator name="gen" src="gencopy.cpp" export="std.copy" outputFile="*STDOUT"/>
 
 
 <Test rank="1"><In use="gen" param="20 6 6 112113"/><Out use="sol"/></Test>
