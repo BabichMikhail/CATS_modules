@@ -23,6 +23,6 @@ while (1) {
     ex(0, 'ok') if !defined $a && !defined $o;
     ex(2, 'Extra lines', $i) if !defined $a;
     ex(2, 'Too few lines', $i) if !defined $o;
-    chomp $o; chomp $a;
+    s/[\n\r]//g for ($o, $a);
     ex(1, "lines differ", $i) if $o ne $a;
 }
